@@ -1,0 +1,33 @@
+{
+  "name": "react-pan-zoom-controls",
+  "version": "0.0.2",
+  "description": "A container that can be panned and zoomed with a mixture of pointer, wheel, and touch events, as well as via commands like zoomIn(), panTo(x,y), etc.",
+  "main": "dist/react-zoom-pan-controls.cjs.js",
+  "module": "dist/react-zoom-pan-controls.es.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build"
+  },
+  "keywords": [
+    "react",
+    "pan",
+    "zoom",
+    "touch",
+    "controls",
+    "pinchzoom",
+    "gesture"
+  ],
+  "author": "Dave Seidman",
+  "license": "ISC",
+  "dependencies": {
+    "prop-types": "^15.8.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}
