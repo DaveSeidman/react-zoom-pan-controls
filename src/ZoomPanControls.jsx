@@ -1,141 +1,108 @@
 import React, { useState, useRef, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import { version } from '../package.json'
+import './ZoomPanControls.scss';
 
-export default function ZoomPanControls({
-  minZoom = 0.25,
+console.log(`zoom pan controls version: ${version}`)
+
+const ZoomPanControls = ({
+  minZoom = 0.5,
   maxZoom = 2,
   initialZoom = 1,
   initialPan = { x: 0, y: 0 },
-  targetZoom,             // optional forced zoom
-  targetPan,              // optional forced pan
-  onAnimationEnd,         // optional callback after tween
+  targetZoom,
+  targetPan,
+  onAnimationEnd,
   children,
-  style = {},             // extra style on the outer container
-}) {
-
+  onTransformChange = () => { },
+}) => {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
-
-
   const [touchMode, setTouchMode] = useState(null);
   const [startTouches, setStartTouches] = useState([]);
-  const [startMidpoint, setStartMidpoint] = useState({ x: 0, y: 0 });
-  const [initialPanRef, setInitialPanRef] = useState({ x: 0, y: 0 });
-  const [initialZoomRef, setInitialZoomRef] = useState(initialZoom);
-
-
-  const velocity = useRef({ x: 0, y: 0 });
-  const lastPan = useRef({ x: 0, y: 0 });
-  const lastTimestamp = useRef(0);
-  const inertiaAnimationRef = useRef(null);
-
-  // Container ref
+  const [initialPanRef, setInitialPanRef] = useState(initialPan);
+  const velocityRef = useRef({ x: 0, y: 0 });
+  const animationFrameRef = useRef(null);
   const containerRef = useRef(null);
-
-  // Track if we're mid-tween, so we can block pinch/zoom/pan events
-  const [tweening, setTweening] = useState(false);
-
-  // Easing function
-  const easeInOutCubic = (t) =>
-    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 
   useEffect(() => {
-    // If user did not pass these props, or if we're already animating something else
-    // just skip.
-    if (targetZoom === undefined && targetPan === undefined) return;
-    if (tweening) return;
+    onTransformChange({ zoom, pan });
+  }, [zoom, pan, onTransformChange]);
 
-    // We'll animate from the current (zoom, pan) to the target(s).
-    const startZoom = zoom;
-    const startPanLocal = { ...pan };
-    const endZoom = clampZoom(
-      targetZoom !== undefined ? targetZoom : zoom,
-      minZoom,
-      maxZoom
-    );
+  const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
 
-    const endPan = targetPan !== undefined ? targetPan : { ...pan };
-    console.log(endPan);
-
-    const duration = 600;
-    const startTime = performance.now();
-
-    setTweening(true);
-
-    function animateStep(currentTime) {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = easeInOutCubic(progress);
-
-      const interpolatedZoom = startZoom + (endZoom - startZoom) * eased;
-      const interpolatedPan = {
-        x: startPanLocal.x + (endPan.x - startPanLocal.x) * eased,
-        y: startPanLocal.y + (endPan.y - startPanLocal.y) * eased,
-      };
-
-      // console.log(interpolatedPan)
-
-      setZoom(interpolatedZoom);
-      setPan(interpolatedPan);
-
-      if (progress < 1) {
-        requestAnimationFrame(animateStep);
-      } else {
-        setTweening(false);
-        if (typeof onAnimationEnd === 'function') {
-          onAnimationEnd({ zoom: endZoom, pan: endPan });
-        }
-      }
-    }
-
-    requestAnimationFrame(animateStep);
-  }, [targetZoom, targetPan]);
-
-
-  function clampZoom(z, min, max) {
-    return Math.min(Math.max(z, min), max);
-  }
-
-  function getTouches(e) {
-    // If we are tweening to a forced transform, skip user interaction
-    if (tweening) return [];
+  const getTouches = (e) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return [];
     return Array.from(e.touches).map((touch) => ({
       x: touch.clientX - rect.left,
       y: touch.clientY - rect.top,
     }));
-  }
+  };
 
-  function applyInertia() {
-    if (tweening) return;
-    const deceleration = 0.975;
-    const threshold = 0.01;
-
-    if (
-      Math.abs(velocity.current.x) < threshold &&
-      Math.abs(velocity.current.y) < threshold
-    ) {
-      cancelAnimationFrame(inertiaAnimationRef.current);
-      return;
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      setTouchMode('pan');
+      const currentTouches = getTouches(e);
+      setStartTouches(currentTouches);
+      setInitialPanRef({ x: pan.x, y: pan.y });
+      velocityRef.current = { x: 0, y: 0 }; // Reset velocity
+      cancelAnimationFrame(animationFrameRef.current); // Stop any ongoing inertia
     }
+  };
 
-    velocity.current.x *= deceleration;
-    velocity.current.y *= deceleration;
+  const handleTouchMove = (e) => {
+    if (!touchMode) return;
 
-    setPan((prev) => ({
-      x: prev.x + velocity.current.x,
-      y: prev.y + velocity.current.y,
-    }));
+    const currentTouches = getTouches(e);
 
-    inertiaAnimationRef.current = requestAnimationFrame(applyInertia);
-  }
+    if (touchMode === 'pan' && currentTouches.length === 1) {
+      const dx = currentTouches[0].x - startTouches[0].x;
+      const dy = currentTouches[0].y - startTouches[0].y;
 
+      // Calculate velocity
+      velocityRef.current = {
+        x: dx - (pan.x - initialPanRef.x),
+        y: dy - (pan.y - initialPanRef.y),
+      };
 
-  function handleWheel(e) {
-    // If tweening, skip user interaction
-    if (tweening) return;
-    e.preventDefault();
+      setPan({
+        x: initialPanRef.x + dx,
+        y: initialPanRef.y + dy,
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchMode(null);
+    setStartTouches([]);
+
+    // Begin inertia
+    const inertia = () => {
+      const friction = 0.9;
+      velocityRef.current.x *= friction;
+      velocityRef.current.y *= friction;
+
+      const dx = velocityRef.current.x;
+      const dy = velocityRef.current.y;
+
+      if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+        setPan((prevPan) => ({
+          x: prevPan.x + dx,
+          y: prevPan.y + dy,
+        }));
+
+        animationFrameRef.current = requestAnimationFrame(inertia);
+      } else {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+
+    inertia();
+  };
+
+  const handleWheel = (e) => {
     if (!containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -153,146 +120,50 @@ export default function ZoomPanControls({
 
     setZoom(newZoom);
     setPan({ x: newPanX, y: newPanY });
-  }
-
-
-  function handleTouchStart(e) {
-    if (tweening) return;
-
-    if (e.touches.length === 1) {
-      setTouchMode('pan');
-      const currentTouches = getTouches(e);
-      setStartTouches(currentTouches);
-      setInitialPanRef({ x: pan.x, y: pan.y });
-      velocity.current = { x: 0, y: 0 };
-      lastPan.current = { x: pan.x, y: pan.y };
-      lastTimestamp.current = performance.now();
-    } else if (e.touches.length === 2) {
-      setTouchMode('pinch');
-      const currentTouches = getTouches(e);
-      setStartTouches(currentTouches);
-      setInitialZoomRef(zoom);
-      setInitialPanRef({ x: pan.x, y: pan.y });
-
-      const midpoint = {
-        x: (currentTouches[0].x + currentTouches[1].x) / 2,
-        y: (currentTouches[0].y + currentTouches[1].y) / 2,
-      };
-      setStartMidpoint(midpoint);
-    }
-  }
-
-  function handleTouchMove(e) {
-    if (tweening) return;
-    if (!touchMode) return;
-
-    const currentTouches = getTouches(e);
-
-    // Pan
-    if (touchMode === 'pan' && currentTouches.length === 1) {
-      const dx = currentTouches[0].x - startTouches[0].x;
-      const dy = currentTouches[0].y - startTouches[0].y;
-      const newPan = {
-        x: initialPanRef.x + dx,
-        y: initialPanRef.y + dy,
-      };
-
-      const now = performance.now();
-      const deltaTime = now - lastTimestamp.current;
-      velocity.current = {
-        x: (newPan.x - lastPan.current.x) / deltaTime,
-        y: (newPan.y - lastPan.current.y) / deltaTime,
-      };
-
-      lastPan.current = newPan;
-      lastTimestamp.current = now;
-
-      setPan(newPan);
-    }
-    // Pinch
-    else if (touchMode === 'pinch' && currentTouches.length === 2) {
-      const startDist = Math.hypot(
-        startTouches[1].x - startTouches[0].x,
-        startTouches[1].y - startTouches[0].y
-      );
-      const currentDist = Math.hypot(
-        currentTouches[1].x - currentTouches[0].x,
-        currentTouches[1].y - currentTouches[0].y
-      );
-      const scaleChange = currentDist / startDist;
-
-      const newZoomVal = clampZoom(initialZoomRef * scaleChange, minZoom, maxZoom);
-
-      const newMidpoint = {
-        x: (currentTouches[0].x + currentTouches[1].x) / 2,
-        y: (currentTouches[0].y + currentTouches[1].y) / 2,
-      };
-
-      const dxMid = newMidpoint.x - startMidpoint.x;
-      const dyMid = newMidpoint.y - startMidpoint.y;
-
-      const anchorX = (startMidpoint.x - initialPanRef.x) / initialZoomRef;
-      const anchorY = (startMidpoint.y - initialPanRef.y) / initialZoomRef;
-
-      const scaledAnchorX = anchorX * newZoomVal;
-      const scaledAnchorY = anchorY * newZoomVal;
-
-      const newPanX =
-        initialPanRef.x + dxMid - (scaledAnchorX - anchorX * initialZoomRef);
-      const newPanY =
-        initialPanRef.y + dyMid - (scaledAnchorY - anchorY * initialZoomRef);
-
-      setZoom(newZoomVal);
-      setPan({ x: newPanX, y: newPanY });
-    }
-  }
-
-  function handleTouchEnd(e) {
-    if (tweening) return;
-    if (touchMode === 'pan' && e.touches.length === 0) {
-      lastTimestamp.current = performance.now();
-      lastPan.current = pan;
-      inertiaAnimationRef.current = requestAnimationFrame(applyInertia);
-    }
-    setTouchMode(null);
-    setStartTouches([]);
-  }
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [pan, zoom]);
+  };
 
   const transformStyle = {
     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
     transformOrigin: '0 0',
   };
 
+  const zoomIn = () => setZoom((z) => clampZoom(z + 0.1, minZoom, maxZoom));
+  const zoomOut = () => setZoom((z) => clampZoom(z - 0.1, minZoom, maxZoom));
+  const zoomReset = () => {
+    setZoom(initialZoom);
+    setPan(initialPan);
+  };
+
   return (
     <div
-      className='transform-container'
+      className="zoom-pan-controls"
       ref={containerRef}
-      style={{
-        overflow: 'hidden',
-        touchAction: 'none',
-        position: 'relative',
-        width: '100%',
-        height: '100%',
-        ...style,
-      }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onWheel={handleWheel}
     >
-      <div style={transformStyle}>
-        {children}
-      </div>
+      <div style={transformStyle}>{children}</div>
     </div>
   );
-}
+};
+
+ZoomPanControls.propTypes = {
+  minZoom: PropTypes.number,
+  maxZoom: PropTypes.number,
+  initialZoom: PropTypes.number,
+  initialPan: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  targetZoom: PropTypes.number,
+  targetPan: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  onAnimationEnd: PropTypes.func,
+  onTransformChange: PropTypes.func,
+  children: PropTypes.node.isRequired,
+};
+
+export default ZoomPanControls;

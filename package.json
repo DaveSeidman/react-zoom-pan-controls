@@ -1,12 +1,16 @@
 {
-  "name": "react-pan-zoom-controls",
-  "version": "0.0.2",
+  "name": "react-zoom-pan-controls",
+  "version": "0.0.16",
   "description": "A container that can be panned and zoomed with a mixture of pointer, wheel, and touch events, as well as via commands like zoomIn(), panTo(x,y), etc.",
-  "main": "dist/react-zoom-pan-controls.cjs.js",
+  "main": "dist/react-zoom-pan-controls.umd.js",
   "module": "dist/react-zoom-pan-controls.es.js",
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaveSeidman/react-zoom-pan-controls.git"
+  },
   "scripts": {
     "build": "vite build"
   },
@@ -21,13 +25,16 @@
   ],
   "author": "Dave Seidman",
   "license": "ISC",
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "dependencies": {
-    "prop-types": "^15.8.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "prop-types": "^15.8.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "sass-embedded": "^1.83.1",
     "vite": "^6.0.7"
   }
 }
