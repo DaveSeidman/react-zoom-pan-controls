@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import { name, version } from '../package.json';
 console.log(`${name} ${version}`);
 
-console.log('ZoomPanControls component loaded');
 import './ZoomPanControls.scss';
 
 const ZoomPanControls = ({
@@ -34,6 +33,7 @@ const ZoomPanControls = ({
 
   const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
 
+  // TODO: switch duration and onComplete
   const tween = (start, end, callback, duration, onComplete) => {
     const startTime = performance.now();
 
@@ -52,7 +52,6 @@ const ZoomPanControls = ({
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
-        console.log('tween complete');
         if (onComplete) onComplete();
       }
     };
@@ -193,11 +192,118 @@ const ZoomPanControls = ({
     transformOrigin: '0 0',
   };
 
-  const zoomIn = () => setZoom((z) => clampZoom(z + 0.1, minZoom, maxZoom));
-  const zoomOut = () => setZoom((z) => clampZoom(z - 0.1, minZoom, maxZoom));
+  const zoomIn = () => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // Get the center of the viewport in container coordinates
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // Calculate the center point in the image's space based on the current zoom and pan
+    const imageX = (centerX - pan.x) / zoom;
+    const imageY = (centerY - pan.y) / zoom;
+
+    // Target zoom level (exponentially increase)
+    const targetZoom = clampZoom(zoom * 2, minZoom, maxZoom);
+
+    setTweening(true);
+    tween(
+      zoom,
+      targetZoom,
+      (value) => {
+        // Update zoom during the tween
+        setZoom(value);
+
+        // Adjust pan to maintain the same center point
+        const newPanX = centerX - imageX * value;
+        const newPanY = centerY - imageY * value;
+
+        setPan({ x: newPanX, y: newPanY });
+      },
+      duration,
+      () => {
+        console.log('Zoom in animation complete');
+        setTweening(false);
+      }
+    );
+  };
+
+  const zoomOut = () => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // Get the center of the viewport in container coordinates
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // Calculate the center point in the image's space based on the current zoom and pan
+    const imageX = (centerX - pan.x) / zoom;
+    const imageY = (centerY - pan.y) / zoom;
+
+    // Target zoom level (exponentially decrease)
+    const targetZoom = clampZoom(zoom / 2, minZoom, maxZoom);
+
+    setTweening(true);
+    tween(
+      zoom,
+      targetZoom,
+      (value) => {
+        // Update zoom during the tween
+        setZoom(value);
+
+        // Adjust pan to maintain the same center point
+        const newPanX = centerX - imageX * value;
+        const newPanY = centerY - imageY * value;
+
+        setPan({ x: newPanX, y: newPanY });
+      },
+      duration,
+      () => {
+        console.log('Zoom out animation complete');
+        setTweening(false);
+      }
+    );
+  };
+
+
   const zoomReset = () => {
-    setZoom(initialZoom);
-    setPan(initialPan);
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // Get the center of the viewport in container coordinates
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // Calculate the center point in the image's space based on the current zoom and pan
+    const imageX = (centerX - pan.x) / zoom;
+    const imageY = (centerY - pan.y) / zoom;
+
+    // Target zoom level (exponentially decrease)
+    const targetZoom = clampZoom(initialZoom, minZoom, maxZoom);
+
+    setTweening(true);
+    tween(
+      zoom,
+      targetZoom,
+      (value) => {
+        // Update zoom during the tween
+        setZoom(value);
+
+        // Adjust pan to maintain the same center point
+        const newPanX = centerX - imageX * value;
+        const newPanY = centerY - imageY * value;
+
+        setPan({ x: newPanX, y: newPanY });
+      },
+      duration,
+      () => {
+        setTweening(false);
+      }
+    );
   };
 
   return (
@@ -210,6 +316,13 @@ const ZoomPanControls = ({
       onWheel={handleWheel}
     >
       <div style={transformStyle}>{children}</div>
+      <div className="zoom-pan-controls-buttons"
+        style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 320, outline: '1px solid white' }}
+      >
+        <button style={{ width: 80, height: 80 }} onClick={zoomIn}></button>
+        <button style={{ width: 80, height: 80 }} onClick={zoomOut}></button>
+        <button style={{ width: 80, height: 80 }} onClick={zoomReset}></button>
+      </div>
     </div>
   );
 };
