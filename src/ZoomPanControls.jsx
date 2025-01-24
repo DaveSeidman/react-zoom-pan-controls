@@ -23,7 +23,7 @@ const ZoomPanControls = ({
   const [touchMode, setTouchMode] = useState(null);
   const [startTouches, setStartTouches] = useState([]);
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
-  const [isTweening, setIsTweening] = useState(false); // New state for tweening lock
+  const [tweening, setTweening] = useState(false); // New state for tweening lock
   const velocityRef = useRef({ x: 0, y: 0 });
   const animationFrameRef = useRef(null);
   const containerRef = useRef(null);
@@ -52,6 +52,7 @@ const ZoomPanControls = ({
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
+        console.log('tween complete');
         if (onComplete) onComplete();
       }
     };
@@ -61,20 +62,20 @@ const ZoomPanControls = ({
 
   useEffect(() => {
     if (targetZoom !== undefined && targetZoom !== zoom) {
-      setIsTweening(true);
+      setTweening(true);
       tween(
         zoom,
         clampZoom(targetZoom, minZoom, maxZoom),
         setZoom,
         duration,
-        () => setIsTweening(false)
+        () => { setTweening(false) }
       );
     }
   }, [targetZoom]);
 
   useEffect(() => {
     if (targetPan && (targetPan.x !== pan.x || targetPan.y !== pan.y)) {
-      setIsTweening(true);
+      setTweening(true);
       const startX = pan.x;
       const startY = pan.y;
 
@@ -88,7 +89,7 @@ const ZoomPanControls = ({
           });
         },
         duration,
-        () => setIsTweening(false)
+        () => { setTweening(false) }
       );
     }
   }, [targetPan]);
@@ -103,7 +104,7 @@ const ZoomPanControls = ({
   };
 
   const handleTouchStart = (e) => {
-    if (isTweening) return; // Ignore if a tween is happening
+    if (tweening) return; // Ignore if a tween is happening
 
     if (e.touches.length === 1) {
       setTouchMode('pan');
@@ -116,7 +117,7 @@ const ZoomPanControls = ({
   };
 
   const handleTouchMove = (e) => {
-    if (isTweening || !touchMode) return; // Ignore if a tween is happening
+    if (tweening || !touchMode) return; // Ignore if a tween is happening
 
     const currentTouches = getTouches(e);
 
@@ -138,7 +139,7 @@ const ZoomPanControls = ({
   };
 
   const handleTouchEnd = () => {
-    if (isTweening) return; // Ignore if a tween is happening
+    if (tweening) return; // Ignore if a tween is happening
 
     setTouchMode(null);
     setStartTouches([]);
@@ -168,7 +169,7 @@ const ZoomPanControls = ({
   };
 
   const handleWheel = (e) => {
-    if (isTweening || !containerRef.current) return; // Ignore if a tween is happening
+    if (tweening || !containerRef.current) return; // Ignore if a tween is happening
 
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
