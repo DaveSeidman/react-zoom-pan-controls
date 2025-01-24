@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { version } from '../package.json'
-import './ZoomPanControls.scss';
+import { name, version } from '../package.json';
+console.log(`${name} ${version}`);
 
-console.log(`zoom pan controls version: ${version}`)
+console.log('ZoomPanControls component loaded');
+import './ZoomPanControls.scss';
 
 const ZoomPanControls = ({
   minZoom = 0.5,
@@ -15,22 +16,82 @@ const ZoomPanControls = ({
   onAnimationEnd,
   children,
   onTransformChange = () => { },
+  duration = 1200, // duration in milliseconds
 }) => {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
   const [touchMode, setTouchMode] = useState(null);
   const [startTouches, setStartTouches] = useState([]);
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
+  const [isTweening, setIsTweening] = useState(false); // New state for tweening lock
   const velocityRef = useRef({ x: 0, y: 0 });
   const animationFrameRef = useRef(null);
   const containerRef = useRef(null);
-
 
   useEffect(() => {
     onTransformChange({ zoom, pan });
   }, [zoom, pan, onTransformChange]);
 
   const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
+
+  const tween = (start, end, callback, duration, onComplete) => {
+    const startTime = performance.now();
+
+    const cubicBezier = (t) => {
+      const c1 = 0, c2 = .9, c3 = 1, c4 = .1;
+      return (1 - 3 * c3 + 3 * c1) * t * t * t + (3 * c3 - 6 * c1) * t * t + (3 * c1) * t;
+    };
+    const animate = (time) => {
+      const elapsed = time - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = cubicBezier(progress);
+      const value = start + (end - start) * easedProgress;
+
+      callback(value);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        if (onComplete) onComplete();
+      }
+    };
+
+    requestAnimationFrame(animate);
+  };
+
+  useEffect(() => {
+    if (targetZoom !== undefined && targetZoom !== zoom) {
+      setIsTweening(true);
+      tween(
+        zoom,
+        clampZoom(targetZoom, minZoom, maxZoom),
+        setZoom,
+        duration,
+        () => setIsTweening(false)
+      );
+    }
+  }, [targetZoom]);
+
+  useEffect(() => {
+    if (targetPan && (targetPan.x !== pan.x || targetPan.y !== pan.y)) {
+      setIsTweening(true);
+      const startX = pan.x;
+      const startY = pan.y;
+
+      tween(
+        0,
+        1,
+        (progress) => {
+          setPan({
+            x: startX + (targetPan.x - startX) * progress,
+            y: startY + (targetPan.y - startY) * progress,
+          });
+        },
+        duration,
+        () => setIsTweening(false)
+      );
+    }
+  }, [targetPan]);
 
   const getTouches = (e) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -42,6 +103,8 @@ const ZoomPanControls = ({
   };
 
   const handleTouchStart = (e) => {
+    if (isTweening) return; // Ignore if a tween is happening
+
     if (e.touches.length === 1) {
       setTouchMode('pan');
       const currentTouches = getTouches(e);
@@ -53,7 +116,7 @@ const ZoomPanControls = ({
   };
 
   const handleTouchMove = (e) => {
-    if (!touchMode) return;
+    if (isTweening || !touchMode) return; // Ignore if a tween is happening
 
     const currentTouches = getTouches(e);
 
@@ -75,6 +138,8 @@ const ZoomPanControls = ({
   };
 
   const handleTouchEnd = () => {
+    if (isTweening) return; // Ignore if a tween is happening
+
     setTouchMode(null);
     setStartTouches([]);
 
@@ -103,7 +168,7 @@ const ZoomPanControls = ({
   };
 
   const handleWheel = (e) => {
-    if (!containerRef.current) return;
+    if (isTweening || !containerRef.current) return; // Ignore if a tween is happening
 
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -164,6 +229,7 @@ ZoomPanControls.propTypes = {
   onAnimationEnd: PropTypes.func,
   onTransformChange: PropTypes.func,
   children: PropTypes.node.isRequired,
+  duration: PropTypes.number,
 };
 
 export default ZoomPanControls;
