@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { name, version } from '../package.json';
-console.log(`${name} ${version}`);
+// import { name, version } from '../package.json';
+// console.log(`${name} ${version}`);
 
 import './ZoomPanControls.scss';
 
@@ -316,9 +316,7 @@ const ZoomPanControls = ({
       onWheel={handleWheel}
     >
       <div style={transformStyle}>{children}</div>
-      <div className="zoom-pan-controls-buttons"
-        style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 320, outline: '1px solid white' }}
-      >
+      <div className="zoom-pan-controls-buttons">
         <button style={{ width: 80, height: 80 }} onClick={zoomIn}></button>
         <button style={{ width: 80, height: 80 }} onClick={zoomOut}></button>
         <button style={{ width: 80, height: 80 }} onClick={zoomReset}></button>
