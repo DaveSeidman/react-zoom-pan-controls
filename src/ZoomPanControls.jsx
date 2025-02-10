@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-// import { name, version } from '../package.json';
-// console.log(`${name} ${version}`);
+import zoomInIcon from './assets/zoom-in.svg';
+import zoomOutIcon from './assets/zoom-out.svg';
+import zoomResetIcon from './assets/zoom-reset.svg';
+import { name, version } from '../package.json';
+console.log(`${name} ${version}`);
+console.log('new version!')
 
 import './ZoomPanControls.scss';
 
@@ -246,6 +250,11 @@ const ZoomPanControls = ({
     // Target zoom level (exponentially decrease)
     const targetZoom = clampZoom(zoom / 2, minZoom, maxZoom);
 
+    if (targetZoom === zoom) {
+      console.log("no movement needed")
+      return;
+    }
+
     setTweening(true);
     tween(
       zoom,
@@ -317,9 +326,9 @@ const ZoomPanControls = ({
     >
       <div style={transformStyle}>{children}</div>
       <div className="zoom-pan-controls-buttons">
-        <button style={{ width: 80, height: 80 }} onClick={zoomIn}></button>
-        <button style={{ width: 80, height: 80 }} onClick={zoomOut}></button>
-        <button style={{ width: 80, height: 80 }} onClick={zoomReset}></button>
+        <button onClick={zoomIn}><img src={zoomInIcon} /></button>
+        <button onClick={zoomOut}><img src={zoomOutIcon} /></button>
+        <button onClick={zoomReset}><img src={zoomResetIcon} /></button>
       </div>
     </div>
   );
