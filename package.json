@@ -1,6 +1,6 @@
 {
   "name": "react-zoom-pan-controls",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "description": "A container that can be panned and zoomed with a mixture of pointer, wheel, and touch events, as well as via commands like zoomIn(), panTo(x,y), etc.",
   "main": "dist/react-zoom-pan-controls.umd.js",
   "module": "dist/react-zoom-pan-controls.es.js",
@@ -12,6 +12,7 @@
     "url": "git+https://github.com/DaveSeidman/react-zoom-pan-controls.git"
   },
   "scripts": {
+    "dev": "vite build --watch",
     "build": "vite build"
   },
   "keywords": [
@@ -34,8 +35,37 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb": "^19.0.4",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-react": "^7.37.4",
     "sass-embedded": "^1.83.1",
     "vite": "^6.0.7",
     "vite-plugin-css-injected-by-js": "^3.5.2"
+  },
+  "eslintConfig": {
+    "extends": "airbnb",
+    "env": {
+      "es6": true,
+      "browser": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2022,
+      "sourceType": "module"
+    },
+    "rules": {
+      "max-len": 0,
+      "react/prop-types": 0,
+      "object-curly-newline": 0,
+      "jsx-a11y/control-has-associated-label": 0,
+      "jsx-a11y/click-events-have-key-events": 0,
+      "jsx-a11y/no-static-element-interactions": 0,
+      "jsx-a11y/alt-text": 0,
+      "no-console": 0,
+      "no-restricted-globals": 0,
+      "no-param-reassign": 0,
+      "no-unsafe-optional-chaining": 0,
+      "brace-style": 0
+    }
   }
 }
