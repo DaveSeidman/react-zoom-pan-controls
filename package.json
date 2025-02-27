@@ -1,6 +1,6 @@
 {
   "name": "react-zoom-pan-controls",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "A container that can be panned and zoomed with a mixture of pointer, wheel, and touch events, as well as via commands like zoomIn(), panTo(x,y), etc.",
   "main": "dist/react-zoom-pan-controls.umd.js",
   "module": "dist/react-zoom-pan-controls.es.js",
