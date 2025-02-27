@@ -38,7 +38,6 @@ function ZoomPanControls({
 
   const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
 
-  // TODO: switch duration and onComplete
   const tween = (start, end, callback, onComplete) => {
     const startTime = performance.now();
 
@@ -168,23 +167,30 @@ function ZoomPanControls({
     const needsCorrectionY = pan.y > maxY || pan.y < minY;
 
     if (!needsCorrectionX && !needsCorrectionY) {
-      // setTweening(false); // Reset tweening if no correction is needed
-      return;
+      return; // No correction needed
     }
 
-    const correctedX = Math.min(Math.max(pan.x, minX), maxX);
-    const correctedY = Math.min(Math.max(pan.y, minY), maxY);
+    let correctedX = pan.x;
+    let correctedY = pan.y;
+
+    if (needsCorrectionX) {
+      correctedX = Math.min(Math.max(pan.x, minX), maxX);
+    }
+    if (needsCorrectionY) {
+      correctedY = Math.min(Math.max(pan.y, minY), maxY);
+    }
 
     tween(
       0,
       1,
       (progress) => {
         setPan((prevPan) => ({
-          x: prevPan.x + (correctedX - prevPan.x) * progress,
-          y: prevPan.y + (correctedY - prevPan.y) * progress,
+          x: needsCorrectionX ? prevPan.x + (correctedX - prevPan.x) * progress : prevPan.x,
+          y: needsCorrectionY ? prevPan.y + (correctedY - prevPan.y) * progress : prevPan.y,
         }));
       },
       () => {
+        console.log('Bounds correction complete');
       },
     );
   };
