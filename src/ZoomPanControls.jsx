@@ -4,33 +4,30 @@ import zoomInIcon from './assets/zoom-in.svg';
 import zoomOutIcon from './assets/zoom-out.svg';
 import zoomResetIcon from './assets/zoom-reset.svg';
 import { name, version } from '../package.json';
-
+import { cubicBezier } from './utils';
 import './ZoomPanControls.scss';
 
 console.log(`${name} ${version}`);
-console.log('new version!');
 
 function ZoomPanControls({
-  minZoom = 0.5,
-  maxZoom = 2,
-  initialZoom = 1,
-  initialPan = { x: 0, y: 0 },
-  targetZoom,
-  targetPan,
-  zoomFactor = 0.001,
-  onAnimationEnd,
+  minZoom,
+  maxZoom,
+  initialZoom,
+  initialPan,
+  targetZoom, // pass in a target zoom to tween to it
+  targetPan, // pass in a target pan to tween to it
+  zoomFactor,
   children,
-  onTransformChange = () => { },
-  duration = 1200, // duration in milliseconds
+  onTransformChange,
+  duration, // tween duration
 }) {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
   const [touchMode, setTouchMode] = useState(null);
   const [startTouches, setStartTouches] = useState([]);
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
-  const [tweening, setTweening] = useState(false); // New state for tweening lock
   const velocityRef = useRef({ x: 0, y: 0 });
-  const animationFrameRef = useRef(null); // tracks inertia animations
+  const intertiaRef = useRef(null); // tracks inertia animations
   const tweenRef = useRef(null); // track tweened animations
 
   const containerRef = useRef(null);
@@ -45,16 +42,8 @@ function ZoomPanControls({
   const tween = (start, end, callback, onComplete) => {
     const startTime = performance.now();
 
-    const cubicBezier = (t) => {
-      const c1 = 0;
-      const c2 = 0.9;
-      const c3 = 1;
-      const c4 = 0.1;
-      return (1 - 3 * c3 + 3 * c1) * t ** 3 + (3 * c3 - 6 * c1) * t ** 2 + (3 * c1) * t;
-    };
-
     const animate = (time) => {
-      if (!tweenRef.current) return; // ✅ Stop animation if tween is canceled
+      if (!tweenRef.current) return;
 
       const elapsed = time - startTime;
       const progress = Math.min(elapsed / duration, 1);
@@ -64,7 +53,7 @@ function ZoomPanControls({
       callback(value);
 
       if (progress < 1) {
-        tweenRef.current = requestAnimationFrame(animate); // ✅ Store requestAnimationFrame ID
+        tweenRef.current = requestAnimationFrame(animate);
       } else {
         tweenRef.current = null;
         if (onComplete) onComplete();
@@ -76,19 +65,18 @@ function ZoomPanControls({
 
   useEffect(() => {
     if (targetZoom !== undefined && targetZoom !== zoom) {
-      setTweening(true);
       tween(
         zoom,
         clampZoom(targetZoom, minZoom, maxZoom),
         setZoom,
-        () => { setTweening(false); },
+        () => {
+        },
       );
     }
   }, [targetZoom]);
 
   useEffect(() => {
     if (targetPan && (targetPan.x !== pan.x || targetPan.y !== pan.y)) {
-      setTweening(true);
       const startX = pan.x;
       const startY = pan.y;
 
@@ -101,7 +89,9 @@ function ZoomPanControls({
             y: startY + (targetPan.y - startY) * progress,
           });
         },
-        () => { setTweening(false); },
+        () => {
+          // setTweening(false);
+        },
       );
     }
   }, [targetPan]);
@@ -119,11 +109,10 @@ function ZoomPanControls({
     if (tweenRef.current) {
       cancelAnimationFrame(tweenRef.current); // ✅ Cancel tween animation
       tweenRef.current = null;
-      setTweening(false);
     }
 
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current); // ✅ Stop inertia animation
+    if (intertiaRef.current) {
+      cancelAnimationFrame(intertiaRef.current); // ✅ Stop inertia animation
     }
 
     if (e.touches.length === 1) {
@@ -138,19 +127,17 @@ function ZoomPanControls({
   const handleTouchMove = (e) => {
     if (!touchMode) return;
 
-    // ✅ If a tween is active, cancel it so the user regains control immediately
-    if (tweening) {
-      setTweening(false);
-      cancelAnimationFrame(animationFrameRef.current);
+    if (intertiaRef.current) {
+      cancelAnimationFrame(intertiaRef.current);
+      intertiaRef.current = null;
     }
 
     const currentTouches = getTouches(e);
 
-    if (touchMode === 'pan' && currentTouches.length === 1) {
+    if (touchMode === 'pan' && currentTouches.length === 1) { // TODO: test on touchscreen if touchMode is necessary
       const dx = currentTouches[0].x - startTouches[0].x;
       const dy = currentTouches[0].y - startTouches[0].y;
 
-      // Calculate velocity
       velocityRef.current = {
         x: dx - (pan.x - initialPanRef.x),
         y: dy - (pan.y - initialPanRef.y),
@@ -164,8 +151,6 @@ function ZoomPanControls({
   };
 
   const correctPanBounds = () => {
-    if (!containerRef.current) return;
-
     const imageDimensions = { width: 10000, height: 2000 }; // Hardcoded for now
     const rect = containerRef.current.getBoundingClientRect();
     const viewportWidth = rect.width;
@@ -179,22 +164,17 @@ function ZoomPanControls({
     const minY = viewportHeight - scaledImageHeight;
     const maxY = 0;
 
-    const threshold = 1; // Small buffer to avoid unnecessary corrections
-
-    const needsCorrectionX = pan.x > maxX + threshold || pan.x < minX - threshold;
-    const needsCorrectionY = pan.y > maxY + threshold || pan.y < minY - threshold;
-
-    // console.log('Pan:', pan, 'Bounds:', { minX, maxX, minY, maxY }, 'Needs correction:', needsCorrectionX || needsCorrectionY);
+    const needsCorrectionX = pan.x > maxX || pan.x < minX;
+    const needsCorrectionY = pan.y > maxY || pan.y < minY;
 
     if (!needsCorrectionX && !needsCorrectionY) {
-      setTweening(false); // Reset tweening if no correction is needed
+      // setTweening(false); // Reset tweening if no correction is needed
       return;
     }
 
     const correctedX = Math.min(Math.max(pan.x, minX), maxX);
     const correctedY = Math.min(Math.max(pan.y, minY), maxY);
 
-    setTweening(true);
     tween(
       0,
       1,
@@ -205,19 +185,14 @@ function ZoomPanControls({
         }));
       },
       () => {
-        // console.log('Correction complete');
-        setTweening(false);
       },
     );
   };
 
   const handleTouchEnd = () => {
-    if (tweening) return;
-
     setTouchMode(null);
     setStartTouches([]);
 
-    // Begin inertia
     const inertia = () => {
       const friction = 0.9;
       velocityRef.current.x *= friction;
@@ -231,9 +206,10 @@ function ZoomPanControls({
           x: prevPan.x + dx,
           y: prevPan.y + dy,
         }));
-        animationFrameRef.current = requestAnimationFrame(inertia);
+        intertiaRef.current = requestAnimationFrame(inertia);
       } else {
-        cancelAnimationFrame(animationFrameRef.current);
+        cancelAnimationFrame(intertiaRef.current);
+        intertiaRef.current = null;
         correctPanBounds(); // Ensure final correction after inertia
       }
     };
@@ -242,8 +218,6 @@ function ZoomPanControls({
   };
 
   const handleWheel = (e) => {
-    if (tweening || !containerRef.current) return; // Ignore if a tween is happening
-
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -266,8 +240,6 @@ function ZoomPanControls({
   };
 
   const zoomIn = () => {
-    if (!containerRef.current) return;
-
     const rect = containerRef.current.getBoundingClientRect();
 
     // Get the center of the viewport in container coordinates
@@ -279,12 +251,11 @@ function ZoomPanControls({
     const imageY = (centerY - pan.y) / zoom;
 
     // Target zoom level (exponentially increase)
-    const targetZoom = clampZoom(zoom * 2, minZoom, maxZoom);
+    const clampedZoom = clampZoom(zoom * 2, minZoom, maxZoom);
 
-    setTweening(true);
     tween(
       zoom,
-      targetZoom,
+      clampedZoom,
       (value) => {
         // Update zoom during the tween
         setZoom(value);
@@ -296,13 +267,12 @@ function ZoomPanControls({
       },
       () => {
         console.log('Zoom in animation complete');
-        setTweening(false);
       },
     );
   };
 
   const zoomOut = () => {
-    if (!containerRef.current) return;
+    // if (!containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
 
@@ -315,19 +285,17 @@ function ZoomPanControls({
     const imageY = (centerY - pan.y) / zoom;
 
     // Target zoom level (exponentially decrease)
-    const targetZoom = clampZoom(zoom / 2, minZoom, maxZoom);
+    const clampedZoom = clampZoom(zoom / 2, minZoom, maxZoom);
 
-    if (targetZoom === zoom) {
+    if (clampedZoom === zoom) {
       console.log('no movement needed');
       return;
     }
 
-    setTweening(true);
     tween(
       zoom,
-      targetZoom,
+      clampedZoom,
       (value) => {
-        // Update zoom during the tween
         setZoom(value);
 
         // Adjust pan to maintain the same center point
@@ -338,14 +306,11 @@ function ZoomPanControls({
       },
       () => {
         console.log('Zoom out animation complete');
-        setTweening(false);
       },
     );
   };
 
   const zoomReset = () => {
-    if (!containerRef.current) return;
-
     const rect = containerRef.current.getBoundingClientRect();
 
     // Get the center of the viewport in container coordinates
@@ -359,7 +324,6 @@ function ZoomPanControls({
     // Target zoom level (exponentially decrease)
     const targetZoom = clampZoom(initialZoom, minZoom, maxZoom);
 
-    setTweening(true);
     tween(
       zoom,
       targetZoom,
@@ -373,7 +337,6 @@ function ZoomPanControls({
         setPan({ x: newPanX, y: newPanY });
       },
       () => {
-        setTweening(false);
       },
     );
   };
@@ -389,13 +352,25 @@ function ZoomPanControls({
     >
       <div style={transformStyle}>{children}</div>
       <div className="zoom-pan-controls-buttons">
-        <button onClick={zoomIn}><img src={zoomInIcon} /></button>
-        <button onClick={zoomOut}><img src={zoomOutIcon} /></button>
-        <button onClick={zoomReset}><img src={zoomResetIcon} /></button>
+        <button type="button" onClick={zoomIn}><img src={zoomInIcon} /></button>
+        <button type="button" onClick={zoomOut}><img src={zoomOutIcon} /></button>
+        <button type="button" onClick={zoomReset}><img src={zoomResetIcon} /></button>
       </div>
     </div>
   );
 }
+
+ZoomPanControls.defaultProps = {
+  minZoom: 0.5,
+  maxZoom: 2,
+  initialZoom: 1,
+  initialPan: { x: 0, y: 0 },
+  targetZoom: undefined,
+  targetPan: undefined,
+  zoomFactor: 0.001,
+  onTransformChange: () => { },
+  duration: 1200,
+};
 
 ZoomPanControls.propTypes = {
   minZoom: PropTypes.number,
@@ -405,12 +380,12 @@ ZoomPanControls.propTypes = {
     x: PropTypes.number,
     y: PropTypes.number,
   }),
+  zoomFactor: PropTypes.number,
   targetZoom: PropTypes.number,
   targetPan: PropTypes.shape({
     x: PropTypes.number,
     y: PropTypes.number,
   }),
-  onAnimationEnd: PropTypes.func,
   onTransformChange: PropTypes.func,
   children: PropTypes.node.isRequired,
   duration: PropTypes.number,
