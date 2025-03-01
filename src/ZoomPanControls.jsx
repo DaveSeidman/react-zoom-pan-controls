@@ -14,22 +14,32 @@ function ZoomPanControls({
   maxZoom,
   initialZoom,
   initialPan,
-  targetZoom, // pass in a target zoom to tween to it
-  targetPan, // pass in a target pan to tween to it
+  targetZoom,
+  targetPan,
   zoomFactor,
   children,
   onTransformChange,
-  duration, // tween duration
+  duration,
 }) {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
   const [startTouches, setStartTouches] = useState([]);
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
+
   const velocityRef = useRef({ x: 0, y: 0 });
   const intertiaRef = useRef(null); // tracks inertia animations
   const tweenRef = useRef(null); // track tweened animations
 
   const containerRef = useRef(null);
+  // This ref will store the boundingClientRect **once** (cached).
+  const containerRectRef = useRef(null);
+
+  // On mount, measure and store the container's bounding rect.
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRectRef.current = containerRef.current.getBoundingClientRect();
+    }
+  }, []);
 
   useEffect(() => {
     onTransformChange({ zoom, pan });
@@ -61,6 +71,9 @@ function ZoomPanControls({
     tweenRef.current = requestAnimationFrame(animate);
   };
 
+  /* ---------------------------------------------------------------------
+     Observing targetZoom/targetPan changes for tweening to new states
+  --------------------------------------------------------------------- */
   useEffect(() => {
     if (targetZoom !== undefined && targetZoom !== zoom) {
       tween(
@@ -89,9 +102,23 @@ function ZoomPanControls({
     }
   }, [targetPan]);
 
+  /* ---------------------------------------------------------------------
+     Helper to get the cached boundingClientRect or a default fallback
+  --------------------------------------------------------------------- */
+  const getContainerRect = () => (
+    containerRectRef.current || {
+      width: 0,
+      height: 0,
+      left: 0,
+      top: 0,
+    }
+  );
+
+  /* ---------------------------------------------------------------------
+     Touch Handlers
+  --------------------------------------------------------------------- */
   const getTouches = (e) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return [];
+    const rect = getContainerRect();
     return Array.from(e.touches).map((touch) => ({
       x: touch.clientX - rect.left,
       y: touch.clientY - rect.top,
@@ -124,7 +151,7 @@ function ZoomPanControls({
 
     const currentTouches = getTouches(e);
 
-    if (currentTouches.length === 1) { // TODO: test on touchscreen if touchMode is necessary
+    if (currentTouches.length === 1) {
       const dx = currentTouches[0].x - startTouches[0].x;
       const dy = currentTouches[0].y - startTouches[0].y;
 
@@ -140,15 +167,70 @@ function ZoomPanControls({
     }
   };
 
+  const handleTouchEnd = () => {
+    setStartTouches([]);
+
+    const inertia = () => {
+      const friction = 0.9;
+      velocityRef.current.x *= friction;
+      velocityRef.current.y *= friction;
+
+      const dx = velocityRef.current.x;
+      const dy = velocityRef.current.y;
+
+      if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+        setPan((prevPan) => ({
+          x: prevPan.x + dx,
+          y: prevPan.y + dy,
+        }));
+        intertiaRef.current = requestAnimationFrame(inertia);
+      } else {
+        cancelAnimationFrame(intertiaRef.current);
+        intertiaRef.current = null;
+        correctPanBounds(); // final correction
+      }
+    };
+
+    inertia();
+  };
+
+  /* ---------------------------------------------------------------------
+     Mouse Wheel Handler
+  --------------------------------------------------------------------- */
+  const handleWheel = (e) => {
+    if (intertiaRef.current) {
+      cancelAnimationFrame(intertiaRef.current);
+      intertiaRef.current = null;
+    }
+    if (tweenRef.current) {
+      cancelAnimationFrame(tweenRef.current);
+      tweenRef.current = null;
+    }
+
+    const rect = getContainerRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const imageX = (mouseX - pan.x) / zoom;
+    const imageY = (mouseY - pan.y) / zoom;
+
+    const newZoom = clampZoom(zoom * (1 - e.deltaY * zoomFactor), minZoom, maxZoom);
+    const newPanX = mouseX - imageX * newZoom;
+    const newPanY = mouseY - imageY * newZoom;
+
+    setZoom(newZoom);
+    setPan({ x: newPanX, y: newPanY });
+  };
+
   const correctPanBounds = () => {
-    const imageDimensions = { width: 10000, height: 2000 }; // Hardcoded for now
-    const rect = containerRef.current.getBoundingClientRect();
+    // Hardcoded image dimensions for demonstration:
+    const imageDimensions = { width: 10000, height: 2000 };
+    const rect = getContainerRect();
     const viewportWidth = rect.width;
     const viewportHeight = rect.height;
     const scaledImageWidth = imageDimensions.width * zoom;
     const scaledImageHeight = imageDimensions.height * zoom;
 
-    // Calculate boundaries dynamically
     const minX = viewportWidth - scaledImageWidth;
     const maxX = 0;
     const minY = viewportHeight - scaledImageHeight;
@@ -157,9 +239,7 @@ function ZoomPanControls({
     const needsCorrectionX = pan.x > maxX || pan.x < minX;
     const needsCorrectionY = pan.y > maxY || pan.y < minY;
 
-    if (!needsCorrectionX && !needsCorrectionY) {
-      return; // No correction needed
-    }
+    if (!needsCorrectionX && !needsCorrectionY) return;
 
     let correctedX = pan.x;
     let correctedY = pan.y;
@@ -186,65 +266,11 @@ function ZoomPanControls({
     );
   };
 
-  const handleTouchEnd = () => {
-    setStartTouches([]);
-
-    const inertia = () => {
-      const friction = 0.9;
-      velocityRef.current.x *= friction;
-      velocityRef.current.y *= friction;
-
-      const dx = velocityRef.current.x;
-      const dy = velocityRef.current.y;
-
-      if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-        setPan((prevPan) => ({
-          x: prevPan.x + dx,
-          y: prevPan.y + dy,
-        }));
-        intertiaRef.current = requestAnimationFrame(inertia);
-      } else {
-        cancelAnimationFrame(intertiaRef.current);
-        intertiaRef.current = null;
-        correctPanBounds(); // Ensure final correction after inertia
-      }
-    };
-
-    inertia();
-  };
-
-  const handleWheel = (e) => {
-    if (intertiaRef.current) {
-      cancelAnimationFrame(intertiaRef.current);
-      intertiaRef.current = null;
-    }
-    if (tweenRef.current) {
-      cancelAnimationFrame(tweenRef.current);
-      tweenRef.current = null;
-    }
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const imageX = (mouseX - pan.x) / zoom;
-    const imageY = (mouseY - pan.y) / zoom;
-
-    const newZoom = clampZoom(zoom * (1 - e.deltaY * zoomFactor), minZoom, maxZoom);
-
-    const newPanX = mouseX - imageX * newZoom;
-    const newPanY = mouseY - imageY * newZoom;
-
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
-  };
-
-  const transformStyle = {
-    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-    transformOrigin: '0 0',
-  };
-
+  /* ---------------------------------------------------------------------
+     Zoom Buttons
+  --------------------------------------------------------------------- */
   const zoomIn = () => {
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = getContainerRect();
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     const imageX = (centerX - pan.x) / zoom;
@@ -263,7 +289,7 @@ function ZoomPanControls({
   };
 
   const zoomOut = () => {
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = getContainerRect();
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     const imageX = (centerX - pan.x) / zoom;
@@ -282,8 +308,7 @@ function ZoomPanControls({
   };
 
   const zoomReset = () => {
-    const rect = containerRef.current.getBoundingClientRect();
-
+    const rect = getContainerRect();
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     const imageX = (centerX - pan.x) / zoom;
@@ -293,9 +318,7 @@ function ZoomPanControls({
       zoom,
       clampZoom(initialZoom, minZoom, maxZoom),
       (value) => {
-        // Update zoom during the tween
         setZoom(value);
-        // Adjust pan to maintain the same center point
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
         setPan({ x: newPanX, y: newPanY });
@@ -312,7 +335,14 @@ function ZoomPanControls({
       onTouchEnd={handleTouchEnd}
       onWheel={handleWheel}
     >
-      <div style={transformStyle}>{children}</div>
+      <div
+        className="container"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+        }}
+      >
+        {children}
+      </div>
       <div className="zoom-pan-controls-buttons">
         <button type="button" onClick={zoomIn}><img src={zoomInIcon} /></button>
         <button type="button" onClick={zoomOut}><img src={zoomOutIcon} /></button>

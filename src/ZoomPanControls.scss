@@ -5,6 +5,10 @@
   width: 100%;
   height: 100%;
 
+  .container {
+    transform-origin: 0 0;
+  }
+
   &-buttons {
     position: absolute;
     bottom: 0;
