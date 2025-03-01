@@ -102,9 +102,6 @@ function ZoomPanControls({
     }
   }, [targetPan]);
 
-  /* ---------------------------------------------------------------------
-     Helper to get the cached boundingClientRect or a default fallback
-  --------------------------------------------------------------------- */
   const getContainerRect = () => (
     containerRectRef.current || {
       width: 0,
@@ -114,9 +111,45 @@ function ZoomPanControls({
     }
   );
 
-  /* ---------------------------------------------------------------------
-     Touch Handlers
-  --------------------------------------------------------------------- */
+  const correctPanBounds = () => {
+    const imageDimensions = { width: 10000, height: 2000 };
+    const rect = getContainerRect();
+    const viewportWidth = rect.width;
+    const viewportHeight = rect.height;
+    const scaledImageWidth = imageDimensions.width * zoom;
+    const scaledImageHeight = imageDimensions.height * zoom;
+
+    const minX = viewportWidth - scaledImageWidth;
+    const maxX = 0;
+    const minY = viewportHeight - scaledImageHeight;
+    const maxY = 0;
+
+    const needsCorrectionX = pan.x > maxX || pan.x < minX;
+    const needsCorrectionY = pan.y > maxY || pan.y < minY;
+
+    if (!needsCorrectionX && !needsCorrectionY) return;
+
+    let correctedX = pan.x;
+    let correctedY = pan.y;
+
+    if (needsCorrectionX) correctedX = Math.min(Math.max(pan.x, minX), maxX);
+    if (needsCorrectionY) correctedY = Math.min(Math.max(pan.y, minY), maxY);
+
+    tween(
+      0,
+      1,
+      (progress) => {
+        setPan((prevPan) => ({
+          x: needsCorrectionX ? prevPan.x + (correctedX - prevPan.x) * progress : prevPan.x,
+          y: needsCorrectionY ? prevPan.y + (correctedY - prevPan.y) * progress : prevPan.y,
+        }));
+      },
+      () => {
+        console.log('Bounds correction complete');
+      },
+    );
+  };
+
   const getTouches = (e) => {
     const rect = getContainerRect();
     return Array.from(e.touches).map((touch) => ({
@@ -194,9 +227,6 @@ function ZoomPanControls({
     inertia();
   };
 
-  /* ---------------------------------------------------------------------
-     Mouse Wheel Handler
-  --------------------------------------------------------------------- */
   const handleWheel = (e) => {
     if (intertiaRef.current) {
       cancelAnimationFrame(intertiaRef.current);
@@ -222,53 +252,6 @@ function ZoomPanControls({
     setPan({ x: newPanX, y: newPanY });
   };
 
-  const correctPanBounds = () => {
-    // Hardcoded image dimensions for demonstration:
-    const imageDimensions = { width: 10000, height: 2000 };
-    const rect = getContainerRect();
-    const viewportWidth = rect.width;
-    const viewportHeight = rect.height;
-    const scaledImageWidth = imageDimensions.width * zoom;
-    const scaledImageHeight = imageDimensions.height * zoom;
-
-    const minX = viewportWidth - scaledImageWidth;
-    const maxX = 0;
-    const minY = viewportHeight - scaledImageHeight;
-    const maxY = 0;
-
-    const needsCorrectionX = pan.x > maxX || pan.x < minX;
-    const needsCorrectionY = pan.y > maxY || pan.y < minY;
-
-    if (!needsCorrectionX && !needsCorrectionY) return;
-
-    let correctedX = pan.x;
-    let correctedY = pan.y;
-
-    if (needsCorrectionX) {
-      correctedX = Math.min(Math.max(pan.x, minX), maxX);
-    }
-    if (needsCorrectionY) {
-      correctedY = Math.min(Math.max(pan.y, minY), maxY);
-    }
-
-    tween(
-      0,
-      1,
-      (progress) => {
-        setPan((prevPan) => ({
-          x: needsCorrectionX ? prevPan.x + (correctedX - prevPan.x) * progress : prevPan.x,
-          y: needsCorrectionY ? prevPan.y + (correctedY - prevPan.y) * progress : prevPan.y,
-        }));
-      },
-      () => {
-        console.log('Bounds correction complete');
-      },
-    );
-  };
-
-  /* ---------------------------------------------------------------------
-     Zoom Buttons
-  --------------------------------------------------------------------- */
   const zoomIn = () => {
     const rect = getContainerRect();
     const centerX = rect.width / 2;
