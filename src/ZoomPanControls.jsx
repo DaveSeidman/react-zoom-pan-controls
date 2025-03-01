@@ -23,7 +23,6 @@ function ZoomPanControls({
 }) {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
-  const [touchMode, setTouchMode] = useState(null);
   const [startTouches, setStartTouches] = useState([]);
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
   const velocityRef = useRef({ x: 0, y: 0 });
@@ -68,8 +67,6 @@ function ZoomPanControls({
         zoom,
         clampZoom(targetZoom, minZoom, maxZoom),
         setZoom,
-        () => {
-        },
       );
     }
   }, [targetZoom]);
@@ -88,9 +85,6 @@ function ZoomPanControls({
             y: startY + (targetPan.y - startY) * progress,
           });
         },
-        () => {
-          // setTweening(false);
-        },
       );
     }
   }, [targetPan]);
@@ -106,16 +100,15 @@ function ZoomPanControls({
 
   const handleTouchStart = (e) => {
     if (tweenRef.current) {
-      cancelAnimationFrame(tweenRef.current); // ✅ Cancel tween animation
+      cancelAnimationFrame(tweenRef.current);
       tweenRef.current = null;
     }
-
     if (intertiaRef.current) {
-      cancelAnimationFrame(intertiaRef.current); // ✅ Stop inertia animation
+      cancelAnimationFrame(intertiaRef.current);
+      intertiaRef.current = null;
     }
 
     if (e.touches.length === 1) {
-      setTouchMode('pan');
       const currentTouches = getTouches(e);
       setStartTouches(currentTouches);
       setInitialPanRef({ x: pan.x, y: pan.y });
@@ -124,8 +117,6 @@ function ZoomPanControls({
   };
 
   const handleTouchMove = (e) => {
-    if (!touchMode) return;
-
     if (intertiaRef.current) {
       cancelAnimationFrame(intertiaRef.current);
       intertiaRef.current = null;
@@ -133,7 +124,7 @@ function ZoomPanControls({
 
     const currentTouches = getTouches(e);
 
-    if (touchMode === 'pan' && currentTouches.length === 1) { // TODO: test on touchscreen if touchMode is necessary
+    if (currentTouches.length === 1) { // TODO: test on touchscreen if touchMode is necessary
       const dx = currentTouches[0].x - startTouches[0].x;
       const dy = currentTouches[0].y - startTouches[0].y;
 
@@ -196,7 +187,6 @@ function ZoomPanControls({
   };
 
   const handleTouchEnd = () => {
-    setTouchMode(null);
     setStartTouches([]);
 
     const inertia = () => {
@@ -224,6 +214,14 @@ function ZoomPanControls({
   };
 
   const handleWheel = (e) => {
+    if (intertiaRef.current) {
+      cancelAnimationFrame(intertiaRef.current);
+      intertiaRef.current = null;
+    }
+    if (tweenRef.current) {
+      cancelAnimationFrame(tweenRef.current);
+      tweenRef.current = null;
+    }
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -247,71 +245,38 @@ function ZoomPanControls({
 
   const zoomIn = () => {
     const rect = containerRef.current.getBoundingClientRect();
-
-    // Get the center of the viewport in container coordinates
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-
-    // Calculate the center point in the image's space based on the current zoom and pan
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
-    // Target zoom level (exponentially increase)
-    const clampedZoom = clampZoom(zoom * 2, minZoom, maxZoom);
-
     tween(
       zoom,
-      clampedZoom,
+      clampZoom(zoom * 2, minZoom, maxZoom),
       (value) => {
-        // Update zoom during the tween
-        setZoom(value);
-
-        // Adjust pan to maintain the same center point
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
+        setZoom(value);
         setPan({ x: newPanX, y: newPanY });
-      },
-      () => {
-        console.log('Zoom in animation complete');
       },
     );
   };
 
   const zoomOut = () => {
-    // if (!containerRef.current) return;
-
     const rect = containerRef.current.getBoundingClientRect();
-
-    // Get the center of the viewport in container coordinates
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-
-    // Calculate the center point in the image's space based on the current zoom and pan
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
-    // Target zoom level (exponentially decrease)
-    const clampedZoom = clampZoom(zoom / 2, minZoom, maxZoom);
-
-    if (clampedZoom === zoom) {
-      console.log('no movement needed');
-      return;
-    }
-
     tween(
       zoom,
-      clampedZoom,
+      clampZoom(zoom / 2, minZoom, maxZoom),
       (value) => {
-        setZoom(value);
-
-        // Adjust pan to maintain the same center point
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
-
+        setZoom(value);
         setPan({ x: newPanX, y: newPanY });
-      },
-      () => {
-        console.log('Zoom out animation complete');
       },
     );
   };
@@ -319,30 +284,21 @@ function ZoomPanControls({
   const zoomReset = () => {
     const rect = containerRef.current.getBoundingClientRect();
 
-    // Get the center of the viewport in container coordinates
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-
-    // Calculate the center point in the image's space based on the current zoom and pan
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
-    // Target zoom level (exponentially decrease)
-    const targetZoom = clampZoom(initialZoom, minZoom, maxZoom);
-
     tween(
       zoom,
-      targetZoom,
+      clampZoom(initialZoom, minZoom, maxZoom),
       (value) => {
         // Update zoom during the tween
         setZoom(value);
-
         // Adjust pan to maintain the same center point
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
         setPan({ x: newPanX, y: newPanY });
-      },
-      () => {
       },
     );
   };
