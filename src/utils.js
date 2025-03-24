@@ -1,7 +1,7 @@
 export const cubicBezier = (t) => {
   const p0 = 0;
-  const p1 = 0.1;
-  const p2 = 0.9;
+  const p1 = 0.001;
+  const p2 = 0.999;
   const p3 = 1;
 
   return (

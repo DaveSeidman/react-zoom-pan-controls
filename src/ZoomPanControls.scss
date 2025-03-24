@@ -11,14 +11,33 @@
 
   &-buttons {
     position: absolute;
-    bottom: 0;
-    left: 0;
     width: 100px;
     height: 300px;
     display: flex;
     flex-direction: column;
     justify-content: space-evenly;
     align-items: center;
+    margin: 2rem;
+    
+    &.bottom-left {
+      bottom: 0;
+      left: 0;
+    }
+
+    &.bottom-right {
+      bottom: 0;
+      right: 0;
+    }
+
+    &.top-left {
+      top: 0;
+      left: 0;
+    }
+
+    &.top-right {
+      top: 0;
+      right: 0;
+    }
 
     button {
       width: 70px;

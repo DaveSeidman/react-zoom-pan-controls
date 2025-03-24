@@ -20,6 +20,7 @@ function ZoomPanControls({
   children,
   onTransformChange,
   duration,
+  controlsPosition,
 }) {
   const [pan, setPan] = useState(initialPan);
   const [zoom, setZoom] = useState(initialZoom);
@@ -27,14 +28,13 @@ function ZoomPanControls({
   const [initialPanRef, setInitialPanRef] = useState(initialPan);
 
   const velocityRef = useRef({ x: 0, y: 0 });
-  const intertiaRef = useRef(null); // tracks inertia animations
-  const tweenRef = useRef(null); // track tweened animations
+  const intertiaRef = useRef(); // tracks inertia animations
+  const tweenRef = useRef(); // track tweened animations
 
-  const containerRef = useRef(null);
-  // This ref will store the boundingClientRect **once** (cached).
-  const containerRectRef = useRef(null);
+  const containerRef = useRef();
+  const containerRectRef = useRef();
+  const childrenRef = useRef();
 
-  // On mount, measure and store the container's bounding rect.
   useEffect(() => {
     if (containerRef.current) {
       containerRectRef.current = containerRef.current.getBoundingClientRect();
@@ -43,7 +43,8 @@ function ZoomPanControls({
 
   useEffect(() => {
     onTransformChange({ zoom, pan });
-  }, [zoom, pan, onTransformChange]);
+    // console.log(zoom, pan);
+  }, [zoom, pan]);
 
   const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
 
@@ -58,22 +59,19 @@ function ZoomPanControls({
       const easedProgress = cubicBezier(progress);
       const value = start + (end - start) * easedProgress;
 
-      callback(value);
-
       if (progress < 1) {
         tweenRef.current = requestAnimationFrame(animate);
       } else {
         tweenRef.current = null;
         if (onComplete) onComplete();
       }
+
+      callback(value);
     };
 
     tweenRef.current = requestAnimationFrame(animate);
   };
 
-  /* ---------------------------------------------------------------------
-     Observing targetZoom/targetPan changes for tweening to new states
-  --------------------------------------------------------------------- */
   useEffect(() => {
     if (targetZoom !== undefined && targetZoom !== zoom) {
       tween(
@@ -85,6 +83,7 @@ function ZoomPanControls({
   }, [targetZoom]);
 
   useEffect(() => {
+    console.log(targetPan);
     if (targetPan && (targetPan.x !== pan.x || targetPan.y !== pan.y)) {
       const startX = pan.x;
       const startY = pan.y;
@@ -102,20 +101,11 @@ function ZoomPanControls({
     }
   }, [targetPan]);
 
-  const getContainerRect = () => (
-    containerRectRef.current || {
-      width: 0,
-      height: 0,
-      left: 0,
-      top: 0,
-    }
-  );
-
   const correctPanBounds = () => {
+    // console.log(childrenRef.current.getBoundingClientRect());
     const imageDimensions = { width: 10000, height: 2000 };
-    const rect = getContainerRect();
-    const viewportWidth = rect.width;
-    const viewportHeight = rect.height;
+    const viewportWidth = containerRectRef.current.width;
+    const viewportHeight = containerRectRef.current.height;
     const scaledImageWidth = imageDimensions.width * zoom;
     const scaledImageHeight = imageDimensions.height * zoom;
 
@@ -150,13 +140,10 @@ function ZoomPanControls({
     );
   };
 
-  const getTouches = (e) => {
-    const rect = getContainerRect();
-    return Array.from(e.touches).map((touch) => ({
-      x: touch.clientX - rect.left,
-      y: touch.clientY - rect.top,
-    }));
-  };
+  const getTouches = (e) => Array.from(e.touches).map((touch) => ({
+    x: touch.clientX - containerRectRef.current.left,
+    y: touch.clientY - containerRectRef.current.top,
+  }));
 
   const handleTouchStart = (e) => {
     if (tweenRef.current) {
@@ -220,7 +207,7 @@ function ZoomPanControls({
       } else {
         cancelAnimationFrame(intertiaRef.current);
         intertiaRef.current = null;
-        correctPanBounds(); // final correction
+        // correctPanBounds(); // final correction
       }
     };
 
@@ -237,9 +224,8 @@ function ZoomPanControls({
       tweenRef.current = null;
     }
 
-    const rect = getContainerRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const mouseX = e.clientX - containerRectRef.current.left;
+    const mouseY = e.clientY - containerRectRef.current.top;
 
     const imageX = (mouseX - pan.x) / zoom;
     const imageY = (mouseY - pan.y) / zoom;
@@ -253,9 +239,8 @@ function ZoomPanControls({
   };
 
   const zoomIn = () => {
-    const rect = getContainerRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+    const centerX = containerRectRef.current.width / 2;
+    const centerY = containerRectRef.current.height / 2;
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
@@ -272,9 +257,8 @@ function ZoomPanControls({
   };
 
   const zoomOut = () => {
-    const rect = getContainerRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+    const centerX = containerRectRef.current.width / 2;
+    const centerY = containerRectRef.current.height / 2;
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
@@ -291,9 +275,8 @@ function ZoomPanControls({
   };
 
   const zoomReset = () => {
-    const rect = getContainerRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+    const centerX = containerRectRef.current.width / 2;
+    const centerY = containerRectRef.current.height / 2;
     const imageX = (centerX - pan.x) / zoom;
     const imageY = (centerY - pan.y) / zoom;
 
@@ -319,6 +302,7 @@ function ZoomPanControls({
       onWheel={handleWheel}
     >
       <div
+        ref={childrenRef}
         className="container"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -326,7 +310,7 @@ function ZoomPanControls({
       >
         {children}
       </div>
-      <div className="zoom-pan-controls-buttons">
+      <div className={`zoom-pan-controls-buttons ${controlsPosition}`}>
         <button type="button" onClick={zoomIn}><img src={zoomInIcon} /></button>
         <button type="button" onClick={zoomOut}><img src={zoomOutIcon} /></button>
         <button type="button" onClick={zoomReset}><img src={zoomResetIcon} /></button>
@@ -345,6 +329,7 @@ ZoomPanControls.defaultProps = {
   zoomFactor: 0.001,
   onTransformChange: () => { },
   duration: 1200,
+  controlsPosition: 'bottom-left',
 };
 
 ZoomPanControls.propTypes = {
@@ -364,6 +349,7 @@ ZoomPanControls.propTypes = {
   onTransformChange: PropTypes.func,
   children: PropTypes.node.isRequired,
   duration: PropTypes.number,
+  controlsPosition: PropTypes.string,
 };
 
 export default ZoomPanControls;
