@@ -48,6 +48,16 @@ function ZoomPanControls({
 
   const clampZoom = (z, min, max) => Math.min(Math.max(z, min), max);
 
+  const applyPan = (newPan) => {
+    const xMin = 0;
+    const xMax = containerRef.current.offsetWidth - (10000 * zoom);
+    const yMin = 0;
+    const yMax = containerRef.current.offsetHeight - (2000 * zoom);
+    newPan.x = Math.min(xMin, Math.max(xMax, newPan.x));
+    newPan.y = Math.min(yMin, Math.max(yMax, newPan.y));
+    setPan(newPan);
+  };
+
   const tween = (start, end, callback, onComplete) => {
     const startTime = performance.now();
 
@@ -91,52 +101,16 @@ function ZoomPanControls({
         0,
         1,
         (progress) => {
-          setPan({
+          const computedPan = {
             x: startX + (targetPan.x - startX) * progress,
             y: startY + (targetPan.y - startY) * progress,
-          });
+          };
+          // Enforce the x constraint
+          applyPan(computedPan);
         },
       );
     }
   }, [targetPan]);
-
-  const correctPanBounds = () => {
-    const imageDimensions = { width: 10000, height: 2000 };
-    const viewportWidth = containerRectRef.current.width;
-    const viewportHeight = containerRectRef.current.height;
-    const scaledImageWidth = imageDimensions.width * zoom;
-    const scaledImageHeight = imageDimensions.height * zoom;
-
-    const minX = viewportWidth - scaledImageWidth;
-    const maxX = 0;
-    const minY = viewportHeight - scaledImageHeight;
-    const maxY = 0;
-
-    const needsCorrectionX = pan.x > maxX || pan.x < minX;
-    const needsCorrectionY = pan.y > maxY || pan.y < minY;
-
-    if (!needsCorrectionX && !needsCorrectionY) return;
-
-    let correctedX = pan.x;
-    let correctedY = pan.y;
-
-    if (needsCorrectionX) correctedX = Math.min(Math.max(pan.x, minX), maxX);
-    if (needsCorrectionY) correctedY = Math.min(Math.max(pan.y, minY), maxY);
-
-    tween(
-      0,
-      1,
-      (progress) => {
-        setPan((prevPan) => ({
-          x: needsCorrectionX ? prevPan.x + (correctedX - prevPan.x) * progress : prevPan.x,
-          y: needsCorrectionY ? prevPan.y + (correctedY - prevPan.y) * progress : prevPan.y,
-        }));
-      },
-      () => {
-        console.log('Bounds correction complete');
-      },
-    );
-  };
 
   const getTouches = (e) => Array.from(e.touches).map((touch) => ({
     x: touch.clientX - containerRectRef.current.left,
@@ -209,8 +183,9 @@ function ZoomPanControls({
         x: newCentroid.x - ratio * (pinchRef.current.initialCentroid.x - pinchRef.current.initialPan.x),
         y: newCentroid.y - ratio * (pinchRef.current.initialCentroid.y - pinchRef.current.initialPan.y),
       };
+
       setZoom(newZoom);
-      setPan(newPan);
+      applyPan(newPan);
     } else if (touches.length === 1) {
       // Single-touch drag.
       const dx = touches[0].x - startTouches[0].x;
@@ -221,10 +196,11 @@ function ZoomPanControls({
         y: dy - (pan.y - initialPanRef.y),
       };
 
-      setPan({
+      const newPan = {
         x: initialPanRef.x + dx,
         y: initialPanRef.y + dy,
-      });
+      };
+      applyPan(newPan);
     }
   };
 
@@ -252,23 +228,48 @@ function ZoomPanControls({
       pinchRef.current = null;
       setStartTouches([]);
       const inertia = () => {
-        const friction = 0.9;
-        velocityRef.current.x *= friction;
-        velocityRef.current.y *= friction;
-        const dx = velocityRef.current.x;
-        const dy = velocityRef.current.y;
-        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-          setPan((prevPan) => ({
-            x: prevPan.x + dx,
-            y: prevPan.y + dy,
-          }));
+        const dampen = 0.95;
+        if (Math.abs(velocityRef.current.x) > 0.1 || Math.abs(velocityRef.current.y) > 0.1) {
+          applyPan((prevPan) => {
+            let newX = prevPan.x + velocityRef.current.x;
+            let newY = prevPan.y + velocityRef.current.y;
+            const xMin = 0;
+            const xMax = containerRef.current.offsetWidth - (10000 * zoom);
+            const yMin = 0;
+            const yMax = containerRef.current.offsetHeight - (2000 * zoom);
+
+            // If newX is too high (child too far right), clamp and reset x velocity.
+            if (newX > xMin) {
+              newX = xMin;
+              velocityRef.current.x = 0;
+            } else if (newX < xMax) {
+              newX = xMax;
+              velocityRef.current.x = 0;
+            }
+
+            // If newY is too high (child too far down), clamp and reset y velocity.
+            if (newY > yMin) {
+              newY = yMin;
+              velocityRef.current.y = 0;
+            } else if (newY < yMax) {
+              newY = yMax;
+              velocityRef.current.y = 0;
+            }
+
+            return { x: newX, y: newY };
+          });
+
+          // Only dampen if velocity hasn't been zeroed out by clamping.
+          velocityRef.current.x *= dampen;
+          velocityRef.current.y *= dampen;
           intertiaRef.current = requestAnimationFrame(inertia);
         } else {
           cancelAnimationFrame(intertiaRef.current);
           intertiaRef.current = null;
-          // Optionally, call correctPanBounds() here if needed.
         }
       };
+
+      // start inertia
       inertia();
     }
   };
@@ -294,7 +295,7 @@ function ZoomPanControls({
     const newPanY = mouseY - imageY * newZoom;
 
     setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
+    applyPan({ x: newPanX, y: newPanY });
   };
 
   const zoomIn = () => {
@@ -310,7 +311,7 @@ function ZoomPanControls({
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
         setZoom(value);
-        setPan({ x: newPanX, y: newPanY });
+        applyPan({ x: newPanX, y: newPanY });
       },
     );
   };
@@ -328,7 +329,7 @@ function ZoomPanControls({
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
         setZoom(value);
-        setPan({ x: newPanX, y: newPanY });
+        applyPan({ x: newPanX, y: newPanY });
       },
     );
   };
@@ -346,7 +347,7 @@ function ZoomPanControls({
         setZoom(value);
         const newPanX = centerX - imageX * value;
         const newPanY = centerY - imageY * value;
-        setPan({ x: newPanX, y: newPanY });
+        applyPan({ x: newPanX, y: newPanY });
       },
     );
   };
